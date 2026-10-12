@@ -18,8 +18,14 @@ The detector publishes a heartbeat every five seconds. Missing game packets hide
 
 See scripts/build.ps1 for release assembly. See THIRD_PARTY.md before public binary releases. No raw captures, screenshots, compiled binaries or credentials belong in this repository. This is a hardened local beta, not a complete or calibrated game-world tracker.
 
-The user-enabled trial whitelist covers 1200000 through 1200099 inclusive. Aside from observed cube types 1200039, 1200040 and 1200041, these types are unconfirmed and can produce non-cube alerts.
+The broad trial whitelist was disabled after noisy alerts. Live alerts use only types 1200039, 1200040, 1200041 and 1301199; the overlay filters to the three Elyos types. Unconfirmed IDs stay in offline mining reports.
 
 Observed cube types: 1200039, 1200040, 1200041, and rift type 1301199 (not projected on this Elyos map). The 1200040 collection matched earlier cube completion/removal signatures. Trial IDs remain distinct from that evidence.
 
 The standalone Python tracker and live overlay can be launched separately. The production launcher is optional. Recovery also handles the recorded 61-byte object frame whose complete coordinate header was swallowed by a short decoded NPC Spawn packet; missing metadata is explicitly labeled. This path still requires a configured type, nonzero entity, flags 4 and plausible coordinates.
+
+## Mine existing recordings
+
+Run python tracker/mine_cube_ids.py --folder PATH_TO_LOCAL_LOGS --output PATH_TO_REPORTS. The utility scans a2log captures, maps object appearances to collection signatures within each connection and zone, checks removal packets, and writes catalogue.json, encounters.csv and README.md locally. Session entity IDs are listed as evidence; reusable type IDs classify objects. It does not modify live alert settings and cannot enumerate types never sent to the client. The observed signature remains experimental. Reports and raw captures are not committed.
+
+The local scan of 27 recordings found 32 matching completion/removal sequences spanning types 1200039, 1200040, 1200041 and 1301199. Five completion signatures had no mapped appearance; those remain unresolved.

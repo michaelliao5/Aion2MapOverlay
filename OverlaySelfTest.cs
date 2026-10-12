@@ -21,7 +21,7 @@ public static class OverlaySelfTest
             LiveCubeFeed.StatePath=testPath;
             double now=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()/1000.0;
             File.WriteAllText(testPath,JsonSerializer.Serialize(new {updated_at=now,running=true,cubes=new[]{new {Entity=1,Type=1200041,X=0,Y=0,Z=0},new {Entity=2,Type=1301199,X=0,Y=0,Z=0},new {Entity=3,Type=1200008,X=0,Y=0,Z=0},new {Entity=4,Type=1200078,X=0,Y=0,Z=0},new {Entity=5,Type=1200040,X=0,Y=0,Z=0}}}));
-            if (LiveCubeFeed.Read(8192).Count!=4) throw new Exception("Live feed region filter failed");
+            if (LiveCubeFeed.Read(8192).Count!=2) throw new Exception("Live feed region filter failed");
             File.WriteAllText(testPath,JsonSerializer.Serialize(new {updated_at=now-30,running=true,cubes=new[]{new {Entity=1,Type=1200041,X=0,Y=0,Z=0}}}));
             if (LiveCubeFeed.Read(8192).Count!=0) throw new Exception("Stale live feed was not hidden");
         }

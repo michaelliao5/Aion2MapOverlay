@@ -20,3 +20,5 @@ self-test*.txt
 recorded-match.json
 .env*
 artifacts/
+
+cube-catalogue/

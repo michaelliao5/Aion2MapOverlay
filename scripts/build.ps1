@@ -6,7 +6,7 @@ $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 $overlayOutput = Join-Path $OutputDirectory 'overlay'
 $trackerOutput = Join-Path $OutputDirectory 'tracker'
 New-Item -ItemType Directory -Force -Path $overlayOutput,$trackerOutput | Out-Null
-python -m unittest discover -s (Join-Path $sourceRoot 'tracker') -p test_probe.py
+python -m unittest discover -s (Join-Path $sourceRoot 'tracker') -p 'test_*.py'
 if ($LASTEXITCODE -ne 0) { throw 'Tracker tests failed.' }
 dotnet publish (Join-Path $sourceRoot 'Aion2MapOverlay.csproj') -c Release -r win-x64 --self-contained true -o $overlayOutput
 if ($LASTEXITCODE -ne 0) { throw 'Overlay build failed.' }
