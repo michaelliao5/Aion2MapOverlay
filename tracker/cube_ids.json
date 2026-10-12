@@ -1,0 +1,26 @@
+{
+  "cube_npc_ids": [],
+  "candidate_cube_object_ids": [
+    1200039,
+    1200041,
+    1301199,
+    1200008,
+    1200078,
+    1200040
+  ],
+  "north_axis": "-Y",
+  "east_axis": "+X",
+  "note": "Experimentally observed cube object types. Catalogue incomplete; units_per_meter=100 is an estimate.",
+  "trial_cube_object_ids": [
+    1200008,
+    1200078
+  ],
+  "trial_note": "Enabled at user request after the unopened Elyos sighting around 3:38 PM. Identification remains unconfirmed; evaluate false positives.",
+  "observed_cube_object_ids": [
+    1200039,
+    1200040,
+    1200041,
+    1301199
+  ],
+  "observed_note": "Type 1200040 additionally matched user-reported collection at 15:48 on October 12, with the same completion and removal signatures as earlier cube encounters."
+}

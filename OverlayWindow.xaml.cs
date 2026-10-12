@@ -93,10 +93,12 @@ public partial class OverlayWindow : System.Windows.Window
         _trayContextMenu.Items.Add(_elyosMenuItem);
 
         _asmodiansMenuItem = new ToolStripMenuItem("Asmodians (마족/魔族)");
+        _asmodiansMenuItem.Enabled = false;
         _asmodiansMenuItem.Click += (s, e) => ChangeFaction(Faction.Asmodians);
         _trayContextMenu.Items.Add(_asmodiansMenuItem);
 
         _abyssMenuItem = new ToolStripMenuItem("Abyss (심연/深淵)");
+        _abyssMenuItem.Enabled = false;
         _abyssMenuItem.Click += (s, e) => ChangeFaction(Faction.Abyss);
         _trayContextMenu.Items.Add(_abyssMenuItem);
 
@@ -183,12 +185,7 @@ public partial class OverlayWindow : System.Windows.Window
             var yaml = ResourceLoader.LoadMarkerYaml(_faction);
             var markerFile = YamlDeserializer.Deserialize<MarkerFileData>(yaml);
 
-            _markers = markerFile.Markers
-                .Where(m =>
-                    (_filter.ShowMonolith && m.Subtype.Equals("monolithMaterial", StringComparison.OrdinalIgnoreCase)) ||
-                    (_filter.ShowHiddenCube && m.Subtype.Equals("hiddenCube", StringComparison.OrdinalIgnoreCase)))
-                .Select(m => (m.X, m.Y, m.Name, m.Subtype))
-                .ToList();
+            _markers = []; // Live packet detections replace static potential spawn pins.
         }
         catch (Exception ex)
         {
@@ -205,22 +202,30 @@ public partial class OverlayWindow : System.Windows.Window
 
         try
         {
+            _markers = LiveCubeFeed.Read(_matcher.MapSize);
+            if (!LiveCubeFeed.Ready || _markers.Count == 0)
+            {
+                ClearMarkers();
+                UpdateStatus(0, 0, LiveCubeFeed.Status);
+                return;
+            }
             using var screenshot = ScreenCapture.CaptureScreen();
 
             if (screenshot.Empty())
             {
+                ClearMarkers();
                 UpdateStatus(0, 0, "No capture");
                 return;
             }
 
             using var result = _matcher.Match(screenshot);
 
-            if (result != null && result.Confidence >= OverlaySettings.MinMatchConfidence)
+            if (result != null && result.Confidence >= OverlaySettings.MinMatchConfidence && result.MatchCount >= MatcherSettings.MinMatchCount)
             {
                 var screenMarkers = ProjectMarkersWithSubtype(result);
 
                 UpdateOverlay(screenMarkers, result.Confidence);
-                UpdateStatus(result.MatchCount, result.Confidence, $"Scale:{result.Scale:F2}");
+                UpdateStatus(result.MatchCount, result.Confidence, LiveCubeFeed.Status);
             }
             else
             {
@@ -228,13 +233,14 @@ public partial class OverlayWindow : System.Windows.Window
                 UpdateStatus(
                     result?.MatchCount ?? 0,
                     result?.Confidence ?? 0,
-                    "Searching..."
+                    $"Map not matched (M:{result?.MatchCount ?? 0}, C:{result?.Confidence ?? 0:P0})"
                 );
             }
         }
-        catch
+        catch (Exception ex)
         {
             ClearMarkers();
+            UpdateStatus(0, 0, "Overlay error: " + ex.Message);
         }
 
         UpdateFps();
@@ -287,7 +293,7 @@ public partial class OverlayWindow : System.Windows.Window
 
         foreach (var marker in markers)
         {
-            WpfColor baseColor = marker.Subtype.Equals("hiddenCube", StringComparison.OrdinalIgnoreCase)
+            WpfColor baseColor = marker.Subtype.Equals("liveCube", StringComparison.OrdinalIgnoreCase)
                 ? HiddenCubeColor
                 : MonolithColor;
 
@@ -304,8 +310,9 @@ public partial class OverlayWindow : System.Windows.Window
                 StrokeThickness = OverlaySettings.Markers.StrokeThickness
             };
 
-            Canvas.SetLeft(circle, marker.X - markerSize / 2);
-            Canvas.SetTop(circle, marker.Y - markerSize / 2);
+            var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
+            Canvas.SetLeft(circle, marker.X / dpi.DpiScaleX - markerSize / 2);
+            Canvas.SetTop(circle, marker.Y / dpi.DpiScaleY - markerSize / 2);
 
             OverlayCanvas.Children.Add(circle);
             _markerElements.Add(circle);
@@ -323,6 +330,7 @@ public partial class OverlayWindow : System.Windows.Window
 
     private void UpdateStatus(int matchCount, double confidence, string status)
     {
+        try { System.IO.File.WriteAllText(System.IO.Path.Combine(AppContext.BaseDirectory, "overlay-status.json"), System.Text.Json.JsonSerializer.Serialize(new { updated_at = DateTimeOffset.UtcNow, matchCount, confidence, status, markerCount = _markerElements.Count, feedPath = LiveCubeFeed.StatePath })); } catch (System.IO.IOException) { }
         if (confidence >= 0.7)
             StatusIndicator.Fill = WpfBrushes.Lime;
         else if (confidence >= 0.5)

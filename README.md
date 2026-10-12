@@ -1,26 +1,23 @@
-https://github.com/user-attachments/assets/9cfe5d3c-6ae3-493b-87e8-e6c7b818e18c
+# AION 2 live cube map overlay
 
-<img width="576" height="257" alt="updated" src="https://github.com/user-attachments/assets/c37c8222-465a-4031-b1ea-338ebc58f8ec" />
+A local Windows companion that draws packet-detected cube candidates on the game's transparent map overlay. Based on hnomkeng/Aion2MapOverlay. This branch replaces static potential spawn markers with live detections and adds a tracker, spoken compass guidance, and a portable launcher.
 
-# Aion2 Map Overlay
-A real-time transparent overlay for Aion2 that detects the in-game world map and displays the locations of Monoliths (Feathers) and Hidden Cubes using computer vision-based screen matching.
+## Run the local release
 
-## Requirements
-- .NET 10.0 Runtime
-- (https://dotnet.microsoft.com/en-us/download/dotnet/thank-you/runtime-desktop-10.0.0-windows-x64-installer)
+Install Npcap from its official website once. Extract the release, stop the earlier prototype tracker and overlay, then double-click Start.cmd. Keep the transparent Elyos map visible on the primary display. Stop.cmd or exiting the overlay tray menu stops the managed tracker and overlay. Python and .NET are bundled. No game input automation or packet sending.
 
-## Usage
-1. Launch `Aion2MapOverlay.exe`
-2. Select your faction (Elyos, Asmodians, or Abyss)
-3. The overlay will appear on your screen
-4. Open your in-game world map - the overlay will automatically detect and show marker locations
-- Monoliths (Magenta) and Hidden Cubes (Cyan)
+settings.json saves voice/sound, adapter selection and world units per meter. Setting sound=false mutes both sound and voice. overlay/map-calibration.json controls world-to-map alignment. Defaults remain experimental. Raw packet-message recording is off by default; enable recordPackets only for investigation. Recordings and diagnostic logs stay in logs/; live state stays in state/. These contain game data and must not be uploaded without review. The launcher never starts with Windows automatically and does not install drivers.
 
-- Right-click the tray icon to exit
-<img width="241" height="150" alt="exit" src="https://github.com/user-attachments/assets/6f6b1087-b323-43a9-b71d-075695fe93ca" />
+## Status and limitations
 
-**Tested only on 1920×1080 resolution and the Asmodians faction.**
+The detector publishes a heartbeat every five seconds. Missing game packets hide markers after 20 seconds and are reported separately from a stopped detector. Direction/distance require a player position no older than five seconds. Only experimentally observed cube types are recognized; catalogue and packet decoding remain incomplete. Elyos map matching is supported; Asmodian candidates are excluded from this map. Multi-monitor support and exact world-to-map calibration are not yet validated. Reported meters use an estimated 100 world units per meter.
 
-## Credits
-- Inspired by [d4-map-overlay](https://github.com/mxtsdev/d4-map-overlay) by mxtsdev
-- Map images and marker coordinates from [aion2-interactive-map](https://github.com/aion2-interactive-map/aion2-interactive-map) by Yihao Liu (tc-imba)
+## Develop
+
+.NET 10 SDK and Python 3.14 are used by this local build. Run python -m unittest discover -s tracker -p test_probe.py. dotnet publish -c Release -r win-x64 --self-contained true builds the overlay. Aion2MapOverlay.exe --self-test checks feed filtering/freshness and reference-map projection. --match-recording PATH checks a locally provided grayscale/colour gameplay capture without saving a new screenshot; --diagnose explicitly captures a local diagnostic image.
+
+See scripts/build.ps1 for release assembly. See THIRD_PARTY.md before public binary releases. No raw captures, screenshots, compiled binaries or credentials belong in this repository. This is a hardened local beta, not a complete or calibrated game-world tracker.
+
+Trial types 1200008 and 1200078 are enabled at user request following unopened sightings. These are unconfirmed and may produce false positives.
+
+Observed cube types: 1200039, 1200040, 1200041, and rift type 1301199 (not projected on this Elyos map). The 1200040 collection matched earlier cube completion/removal signatures. Trial IDs remain distinct from that evidence.

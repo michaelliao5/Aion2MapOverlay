@@ -1,0 +1,23 @@
+name: Validate
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: python -m unittest discover -s tracker -p test_probe.py
+      - run: dotnet publish -c Release -r win-x64 --self-contained true -o artifacts/overlay
+      - shell: pwsh
+        run: |
+          Copy-Item map-calibration.json artifacts/overlay/
+          $test = Start-Process artifacts/overlay/Aion2MapOverlay.exe -ArgumentList '--self-test' -PassThru
+          $test.WaitForExit()
+          if ($test.ExitCode -ne 0) { throw 'Overlay self-test failed' }

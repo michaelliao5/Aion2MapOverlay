@@ -20,7 +20,7 @@ public static class MatcherSettings
     public const float RatioThreshold = 0.7f;
     public const int MinMatchCount = 10;
     public const double ReprojectionThreshold = 5.0;
-    public const double EarlyExitConfidence = 0.55;
+    public const double EarlyExitConfidence = 0.7;
     public static readonly double[] PyramidScales = [0.5, 0.35, 0.25, 0.2, 0.15, 0.125, 0.1];
 
     public static class UIMask
