@@ -1,0 +1,248 @@
+diff --git a/a2kit.go b/a2kit.go
+index ed4b921..0c53624 100644
+--- a/a2kit.go
++++ b/a2kit.go
+@@ -23,7 +23,7 @@ type Config struct {
+ }
+ 
+ func (cfg Config) decoder() *wire.Decoder {
+-	return wire.NewDecoder(wire.Config{EmitClient: cfg.Client, Logger: cfg.Logger})
++	return wire.NewDecoder(wire.Config{EmitClient: cfg.Client, Logger: cfg.Logger, StrictFamilies: true})
+ }
+ 
+ type Reader struct {
+diff --git a/capture/live.go b/capture/live.go
+index 5d5d76a..dcef1eb 100644
+--- a/capture/live.go
++++ b/capture/live.go
+@@ -1,4 +1,4 @@
+-//go:build cgo && !windows
++//go:build (cgo && !windows) || (windows && npcap)
+ 
+ package capture
+ 
+@@ -6,10 +6,14 @@ import (
+ 	"errors"
+ 	"fmt"
+ 	"io"
++	"net"
+ 	"net/netip"
++	"os"
+ 	"runtime"
+ 	"slices"
+ 	"strings"
++	"sync"
++	"sync/atomic"
+ 	"time"
+ 
+ 	"github.com/gopacket/gopacket/pcap"
+@@ -30,9 +34,13 @@ const bufferSize = 16 << 20
+ 
+ // Live captures a device's TCP through libpcap.
+ type Live struct {
+-	h    *pcap.Handle
+-	rec  *recorder // nil unless recording
+-	link int
++	h        *pcap.Handle
++	rec      *recorder // nil unless recording
++	link     int
++	packets  atomic.Uint64
++	segments atomic.Uint64
++	stop     chan struct{}
++	once     sync.Once
+ }
+ 
+ // OpenLive with no name takes the device Devices lists first. It needs root or the access_bpf group on macOS
+@@ -76,7 +84,21 @@ func OpenLive(name string) (*Live, error) {
+ 		h.Close()
+ 		return nil, fmt.Errorf("capture: %s: %w", name, err)
+ 	}
+-	return &Live{h: h, link: int(h.LinkType())}, nil
++	l := &Live{h: h, link: int(h.LinkType()), stop: make(chan struct{})}
++	fmt.Fprintf(os.Stderr, "Npcap: adapter=%s link_type=%d\n", name, l.link)
++	go func() {
++		ticker := time.NewTicker(5 * time.Second)
++		defer ticker.Stop()
++		for {
++			select {
++			case <-l.stop:
++				return
++			case <-ticker.C:
++				fmt.Fprintf(os.Stderr, "Npcap: TCP_packets=%d parsed_TCP_segments=%d (cube IDs still require verification)\n", l.packets.Load(), l.segments.Load())
++			}
++		}
++	}()
++	return l, nil
+ }
+ 
+ // ReadSegment waits for a segment, and returns io.EOF once closed.
+@@ -97,7 +119,9 @@ func (l *Live) ReadSegment() (wire.Segment, error) {
+ 				return wire.Segment{}, fmt.Errorf("capture: recording: %w", err)
+ 			}
+ 		}
++		l.packets.Add(1)
+ 		if s, ok := peel(l.link, data); ok {
++			l.segments.Add(1)
+ 			s.Time, s.IfIndex = ci.Timestamp, ci.InterfaceIndex
+ 			return s, nil
+ 		}
+@@ -126,7 +150,7 @@ func fileLinkType(dlt int) int {
+ 
+ // Close ends the capture, and may be called from any goroutine.
+ func (l *Live) Close() error {
+-	l.h.Close()
++	l.once.Do(func() { close(l.stop); l.h.Close() })
+ 	return nil
+ }
+ 
+@@ -135,6 +159,20 @@ func (l *Live) Lost() error { return nil }
+ 
+ // defaultDevice is the device OpenLive opens when none is named.
+ func defaultDevice() (string, error) {
++	// UDP connect selects the OS route without transmitting a datagram.
++	if conn, err := net.Dial("udp", "1.1.1.1:53"); err == nil {
++		local := conn.LocalAddr().(*net.UDPAddr).IP
++		conn.Close()
++		if devices, err := pcap.FindAllDevs(); err == nil {
++			for _, device := range devices {
++				for _, addr := range device.Addresses {
++					if addr.IP.Equal(local) {
++						return device.Name, nil
++					}
++				}
++			}
++		}
++	}
+ 	devs, err := Devices()
+ 	if err != nil {
+ 		return "", err
+diff --git a/capture/live_windows.go b/capture/live_windows.go
+index 757333f..fa54c74 100644
+--- a/capture/live_windows.go
++++ b/capture/live_windows.go
+@@ -1,4 +1,4 @@
+-//go:build windows
++//go:build windows && !npcap
+ 
+ package capture
+ 
+diff --git a/capture/live_windows_test.go b/capture/live_windows_test.go
+index 44ff996..9525dd0 100644
+--- a/capture/live_windows_test.go
++++ b/capture/live_windows_test.go
+@@ -1,4 +1,4 @@
+-//go:build windows
++//go:build windows && !npcap
+ 
+ package capture
+ 
+diff --git a/capture/pktmon_windows.go b/capture/pktmon_windows.go
+index 2c29cb2..167a458 100644
+--- a/capture/pktmon_windows.go
++++ b/capture/pktmon_windows.go
+@@ -1,4 +1,4 @@
+-//go:build windows
++//go:build windows && !npcap
+ 
+ package capture
+ 
+diff --git a/capture/stale_windows.go b/capture/stale_windows.go
+index c41ebf7..4d75056 100644
+--- a/capture/stale_windows.go
++++ b/capture/stale_windows.go
+@@ -1,4 +1,4 @@
+-//go:build windows
++//go:build windows && !npcap
+ 
+ package capture
+ 
+diff --git a/capture/stale_windows_test.go b/capture/stale_windows_test.go
+index 86bc2a8..5f7cb0a 100644
+--- a/capture/stale_windows_test.go
++++ b/capture/stale_windows_test.go
+@@ -1,4 +1,4 @@
+-//go:build windows
++//go:build windows && !npcap
+ 
+ package capture
+ 
+diff --git a/cmd/a2k/print.go b/cmd/a2k/print.go
+index 844bbfe..0feead8 100644
+--- a/cmd/a2k/print.go
++++ b/cmd/a2k/print.go
+@@ -169,6 +169,10 @@ type jsonLine struct {
+ func marshal(m a2kit.Message, t0 time.Time) []byte {
+ 	l := jsonLine{T: m.Time.Sub(t0).Milliseconds(), TS: m.Time.UTC(), Type: m.Opcode, Flags: m.Flags, Name: typeName(m)}
+ 	err := m.Err
++	// Preserve spawn bytes so the probe can explicitly decode the current two-byte mask layout.
++	if l.Name == "Spawn" || l.Name == "Self" || m.Opcode == 0x382A {
++		l.Payload = fmt.Sprintf("% x", m.Payload)
++	}
+ 	if err == nil {
+ 		l.Event = m.Event
+ 		b, jerr := json.Marshal(l)
+diff --git a/cmd/a2k/stream.go b/cmd/a2k/stream.go
+index bf60053..4c64a52 100644
+--- a/cmd/a2k/stream.go
++++ b/cmd/a2k/stream.go
+@@ -53,7 +53,7 @@ func openStream(o *options, name string) (*a2kit.Reader, error) {
+ 		r = f
+ 	}
+ 
+-	d := wire.NewDecoder(wire.Config{EmitClient: o.client, EmitUnlocked: true, Logger: o.config().Logger})
++	d := wire.NewDecoder(wire.Config{EmitClient: o.client, EmitUnlocked: true, Logger: o.config().Logger, StrictFamilies: true})
+ 	rd := a2kit.New(d, &stream{r: r, buf: make([]byte, 1<<16)})
+ 	rd.Source = a2log.Source{Kind: "feed", Path: name}
+ 	return rd, nil
+diff --git a/wire/decoder.go b/wire/decoder.go
+index ca7346c..0ef17c5 100644
+--- a/wire/decoder.go
++++ b/wire/decoder.go
+@@ -17,6 +17,7 @@ type Config struct {
+ 	EmitClient   bool          // keep the client side's frames too, whose bodies are encrypted
+ 	EmitUnlocked bool          // keep what the hunt finds too, on every stream, with no direction
+ 	KnownOnly    bool          // keep only known opcodes, and take no others as plausible
++	StrictFamilies bool       // also validate opcode families after alignment
+ 	ParseTLS     bool          // parse segments that start like TLS records
+ 	LockIdle     time.Duration // the silence that ends the lock, 60s if zero
+ 	Logger       *slog.Logger  // resyncs, locks and lost gaps, nil is silent
+@@ -382,6 +383,7 @@ func (d *Decoder) stream(k key, t time.Time) *stream {
+ 	st := &stream{key: k, last: t, born: d.born}
+ 	st.fr = framer{
+ 		knownOnly: d.config.KnownOnly,
++		strictFamilies: d.config.StrictFamilies,
+ 		log:       d.log.With("src", k.src, "dst", k.dst),
+ 		emit:      func(body []byte, flags Flags) { d.emit(st, body, flags) },
+ 	}
+diff --git a/wire/framer.go b/wire/framer.go
+index 1032b1a..4bc7788 100644
+--- a/wire/framer.go
++++ b/wire/framer.go
+@@ -33,6 +33,7 @@ const (
+ // framer splits one stream's bytes into frame bodies and passes each to emit.
+ type framer struct {
+ 	knownOnly bool
++	strictFamilies bool
+ 	log       *slog.Logger
+ 	emit      func(body []byte, flags Flags)
+ 
+@@ -194,14 +195,17 @@ func (f *framer) frameLen(p []byte, trust bool) (n, head int) {
+ 		return -1, 0
+ 	}
+ 
+-	if !trust {
++	// Even an aligned stream can lose framing. Never accept an unrelated opcode
++	// family solely because earlier frames aligned: bogus giant frames swallowed
++	// real cube object packets in the local Global recording.
++	if !trust || f.strictFamilies {
+ 		if len(p) < head+2 {
+ 			return 0, head // the opcode has not arrived
+ 		}
+ 		if !f.plausible(p[head:], n-head) {
+ 			return -1, 0
+ 		}
+-		if n > len(p) && n > stallLimit {
++		if !trust && n > len(p) && n > stallLimit {
+ 			return -1, 0 // too long to wait for
+ 		}
+ 	}

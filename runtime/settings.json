@@ -1,0 +1,7 @@
+{
+  "voice": true,
+  "sound": true,
+  "adapter": "",
+  "unitsPerMeter": 100,
+  "recordPackets": false
+}
