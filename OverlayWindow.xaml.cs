@@ -45,6 +45,7 @@ public partial class OverlayWindow : System.Windows.Window
         .IgnoreUnmatchedProperties()
         .Build();
 
+    private object? _lastCandidateDiagnostic;
     private int _frameCount;
     private DateTime _lastFpsUpdate = DateTime.Now;
     private double _currentFps;
@@ -218,18 +219,20 @@ public partial class OverlayWindow : System.Windows.Window
                 return;
             }
 
-            using var result = _matcher.Match(screenshot);
+            using var result = _matcher.MatchCornerMap(screenshot);
 
             if (result != null && result.Confidence >= OverlaySettings.MinMatchConfidence && result.MatchCount >= MatcherSettings.MinMatchCount)
             {
                 var screenMarkers = ProjectMarkersWithSubtype(result);
 
                 UpdateOverlay(screenMarkers, result.Confidence);
-                UpdateStatus(result.MatchCount, result.Confidence, LiveCubeFeed.Status);
+                _lastCandidateDiagnostic = new { at = DateTimeOffset.UtcNow, candidates = _markers.Count, drawn = screenMarkers.Count, matches = result.MatchCount, confidence = result.Confidence, reason = screenMarkers.Count == 0 ? "Projected outside visible map; check calibration or map pan" : "Drawn", mapOffsetX = result.OffsetX, mapOffsetY = result.OffsetY };
+                UpdateStatus(result.MatchCount, result.Confidence, LiveCubeFeed.Status + $" | {screenMarkers.Count} drawn" + (screenMarkers.Count == 0 ? " | outside visible map" : ""));
             }
             else
             {
                 ClearMarkers();
+                _lastCandidateDiagnostic = new { at = DateTimeOffset.UtcNow, candidates = _markers.Count, drawn = 0, matches = result?.MatchCount ?? 0, confidence = result?.Confidence ?? 0, reason = "Map not matched" };
                 UpdateStatus(
                     result?.MatchCount ?? 0,
                     result?.Confidence ?? 0,
@@ -273,7 +276,7 @@ public partial class OverlayWindow : System.Windows.Window
                 if (screenPoint[0].X >= 0 && screenPoint[0].X < result.ScreenSize.Width &&
                     screenPoint[0].Y >= 0 && screenPoint[0].Y < result.ScreenSize.Height)
                 {
-                    screenMarkers.Add((screenPoint[0].X, screenPoint[0].Y, marker.Name, marker.Subtype));
+                    screenMarkers.Add((screenPoint[0].X + result.OffsetX, screenPoint[0].Y + result.OffsetY, marker.Name, marker.Subtype));
                 }
             }
             catch (OpenCvSharp.OpenCVException ex)
@@ -310,9 +313,9 @@ public partial class OverlayWindow : System.Windows.Window
                 StrokeThickness = OverlaySettings.Markers.StrokeThickness
             };
 
-            var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
-            Canvas.SetLeft(circle, marker.X / dpi.DpiScaleX - markerSize / 2);
-            Canvas.SetTop(circle, marker.Y / dpi.DpiScaleY - markerSize / 2);
+            var localPoint = PointFromScreen(new System.Windows.Point(marker.X, marker.Y));
+            Canvas.SetLeft(circle, localPoint.X - markerSize / 2);
+            Canvas.SetTop(circle, localPoint.Y - markerSize / 2);
 
             OverlayCanvas.Children.Add(circle);
             _markerElements.Add(circle);
@@ -330,7 +333,7 @@ public partial class OverlayWindow : System.Windows.Window
 
     private void UpdateStatus(int matchCount, double confidence, string status)
     {
-        try { System.IO.File.WriteAllText(System.IO.Path.Combine(AppContext.BaseDirectory, "overlay-status.json"), System.Text.Json.JsonSerializer.Serialize(new { updated_at = DateTimeOffset.UtcNow, matchCount, confidence, status, markerCount = _markerElements.Count, feedPath = LiveCubeFeed.StatePath })); } catch (System.IO.IOException) { }
+        try { System.IO.File.WriteAllText(System.IO.Path.Combine(AppContext.BaseDirectory, "overlay-status.json"), System.Text.Json.JsonSerializer.Serialize(new { updated_at = DateTimeOffset.UtcNow, matchCount, confidence, status, markerCount = _markerElements.Count, feedPath = LiveCubeFeed.StatePath, lastCandidate = _lastCandidateDiagnostic })); } catch (System.IO.IOException) { }
         if (confidence >= 0.7)
             StatusIndicator.Fill = WpfBrushes.Lime;
         else if (confidence >= 0.5)

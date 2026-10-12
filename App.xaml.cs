@@ -14,8 +14,8 @@ public partial class App : System.Windows.Application
             using var frame = OpenCvSharp.Cv2.ImRead(e.Args[index+1], OpenCvSharp.ImreadModes.Grayscale);
             using var reference = ResourceLoader.LoadMapImage(Models.Faction.Elyos);
             using var matcher = new RobustMapMatcher(reference);
-            using var result = matcher.Match(frame);
-            System.IO.File.WriteAllText(System.IO.Path.Combine(AppContext.BaseDirectory, "recorded-match.json"), System.Text.Json.JsonSerializer.Serialize(new { matched = result != null && result.Confidence >= Config.OverlaySettings.MinMatchConfidence && result.MatchCount >= Config.MatcherSettings.MinMatchCount, confidence = result?.Confidence, matches = result?.MatchCount }));
+            using var result = matcher.MatchCornerMap(frame);
+            System.IO.File.WriteAllText(System.IO.Path.Combine(AppContext.BaseDirectory, "recorded-match.json"), System.Text.Json.JsonSerializer.Serialize(new { matched = result != null && result.Confidence >= Config.OverlaySettings.MinMatchConfidence && result.MatchCount >= Config.MatcherSettings.MinMatchCount, confidence = result?.Confidence, matches = result?.MatchCount, offsetX = result?.OffsetX, offsetY = result?.OffsetY, diagnostics = matcher.Diagnostics }));
             Shutdown(result == null ? 1 : 0); return;
         }
         if (e.Args.Contains("--diagnose"))

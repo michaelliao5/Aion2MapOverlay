@@ -29,3 +29,9 @@ The standalone Python tracker and live overlay can be launched separately. The p
 Run python tracker/mine_cube_ids.py --folder PATH_TO_LOCAL_LOGS --output PATH_TO_REPORTS. The utility scans a2log captures, maps object appearances to collection signatures within each connection and zone, checks removal packets, and writes catalogue.json, encounters.csv and README.md locally. Session entity IDs are listed as evidence; reusable type IDs classify objects. It does not modify live alert settings and cannot enumerate types never sent to the client. The observed signature remains experimental. Reports and raw captures are not committed.
 
 The local scan of 27 recordings found 32 matching completion/removal sequences spanning types 1200039, 1200040, 1200041 and 1301199. Five completion signatures had no mapped appearance; those remain unresolved.
+
+## Transparent-map matching
+
+Matching focuses on the bottom-right transparent map (78?99.5% of desktop width, 63?98% of desktop height), with a 16000-feature reference budget. The saved gameplay capture passed with 26 matches and 71% confidence. Marker projection adds the crop origin before converting physical screen coordinates to overlay-local WPF coordinates. Synthetic corner-map regression matched within one pixel of the expected desktop point. This checks rendering math, not the provisional game-world calibration. Keep the transparent map in its default bottom-right position.
+
+app/overlay-status.json retains lastCandidate diagnostics after a candidate disappears, distinguishing failed matching from a projected point outside the visible map. A zero-candidate feed still draws no live rings.

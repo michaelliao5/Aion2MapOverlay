@@ -16,7 +16,7 @@ public static class OverlaySettings
 
 public static class MatcherSettings
 {
-    public const int MaxFeatures = 4500;
+    public const int MaxFeatures = 16000;
     public const float RatioThreshold = 0.7f;
     public const int MinMatchCount = 10;
     public const double ReprojectionThreshold = 5.0;

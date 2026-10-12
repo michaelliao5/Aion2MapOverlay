@@ -12,6 +12,7 @@ public class RobustMapMatcher : IDisposable
     private readonly List<PyramidLevel> _pyramid = [];
 
     public int MapSize { get; private set; }
+    public List<string> Diagnostics { get; } = [];
 
     public RobustMapMatcher(Mat referenceMap)
     {
@@ -49,11 +50,25 @@ public class RobustMapMatcher : IDisposable
         }
     }
 
+    public MatchResult? MatchCornerMap(Mat screenshotGray)
+    {
+        // Match the transparent map without spending the feature budget on the 3D scene.
+        int x = (int)(screenshotGray.Width * 0.78);
+        int y = (int)(screenshotGray.Height * 0.63);
+        int right = (int)(screenshotGray.Width * 0.995);
+        int bottom = (int)(screenshotGray.Height * 0.98);
+        using var mapArea = new Mat(screenshotGray, new Rect(x, y, right-x, bottom-y));
+        var result = Match(mapArea);
+        if (result != null) { result.OffsetX = x; result.OffsetY = y; }
+        return result;
+    }
+
     public MatchResult? Match(Mat screenshotGray)
     {
         if (screenshotGray.Empty())
             return null;
 
+        Diagnostics.Clear();
         using var uiMask = CreateSimpleUIMask(screenshotGray);
 
         using var queryDescriptors = new Mat();
@@ -118,6 +133,7 @@ public class RobustMapMatcher : IDisposable
             }
         }
 
+        Diagnostics.Add($"scale:{level.Scale} good:{goodMatches.Count}");
         if (goodMatches.Count < MatcherSettings.MinMatchCount)
             return null;
 
@@ -151,6 +167,7 @@ public class RobustMapMatcher : IDisposable
 
         var validation = ValidateHomography(homography, screenshot.Size(), level.Image.Size(), inlierMask);
 
+        Diagnostics.Add($"valid:{validation.IsValid} inlier:{validation.InlierRatio:F2}");
         if (!validation.IsValid)
         {
             homography.Dispose();
@@ -350,6 +367,8 @@ public class MatchResult : IDisposable
     public double Confidence { get; set; }
     public int MatchCount { get; set; }
     public CvSize ScreenSize { get; set; }
+    public int OffsetX { get; set; }
+    public int OffsetY { get; set; }
 
     public void Dispose()
     {
