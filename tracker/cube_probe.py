@@ -109,11 +109,11 @@ def decode_object(payload):
 
 def recover_cube_frames(message,known_ids):
     """Recover only configured cube types at validated inner frame boundaries."""
-    if message.get('recovered') or not message.get('payload') or (message.get('event') and not message.get('error')):
+    if message.get('recovered') or message.get('type')=='34 36' or not message.get('payload'):
         return []
     try:data=bytes.fromhex(message['payload'])
     except ValueError:return []
-    if len(data)<256:return []
+    if len(data)<24:return []
     def var_at(start):
         n=0
         for width in range(1,6):
@@ -131,7 +131,14 @@ def recover_cube_frames(message,known_ids):
             try:
                 size,head=var_at(start)
                 end=start+size+head-4
-                if head!=width or not 24<=size<=2048 or end>len(data) or end<=i+20:continue
+                if head!=width or not 24<=size<=2048 or end<=i+20:continue
+                partial=end>len(data)
+                if partial:
+                    # Observed Spawn framing swallowed a complete cube header,
+                    # but not the remaining object metadata. Restrict this case
+                    # to the observed 61-byte frame and a known complete header.
+                    if message.get('type')!='41 36' or message.get('name')!='Spawn' or size!=61 or len(data)-(i+2)<21:continue
+                    end=len(data)
                 if end<len(data):
                     following=end
                     while following<len(data) and data[following]==0:following+=1
@@ -142,7 +149,7 @@ def recover_cube_frames(message,known_ids):
                 payload=data[i+2:end]
                 obj=decode_object(payload.hex())
                 if obj['Flags']!=4 or obj['Entity']==0 or obj['Type'] not in known_ids:continue
-                recovered.append({'type':'34 36','payload':payload.hex(),'t':message.get('t',0),'recovered':True})
+                recovered.append({'type':'34 36','payload':payload.hex(),'t':message.get('t',0),'recovered':True,'partial_header':partial})
                 break
             except (ValueError,IndexError):continue
     return recovered
@@ -366,7 +373,7 @@ class Probe:
                 self.active_cubes[obj['Entity']]=obj
                 self.counts['alerts']+=1
                 text=self.cube_description(obj,message.get('t',0))
-                if message.get('recovered'):text+=' | recovered frame'
+                if message.get('recovered'):text+=(' | recovered header; metadata incomplete' if message.get('partial_header') else ' | recovered frame')
                 self.emit(text,flush=True)
                 if self.on_alert:
                     self.on_alert()
@@ -488,7 +495,9 @@ def main():
         voice=WindowsVoice()
     probe = Probe(ids, args.discover, mask_bytes=args.spawn_mask_bytes, object_ids=object_ids, on_alert=sound,player_entity=args.player_entity,units_per_meter=args.units_per_meter,on_voice=voice.speak if voice else None,north_axis=north_axis,east_axis=east_axis)
     print("Cube probe: cube coordinates, axis direction, estimated distance. Ctrl+C stops.", flush=True)
-    if object_ids:
+    if config.get('trial_cube_object_ids'):
+        print('Trial whitelist enabled: unconfirmed object types may produce non-cube alerts.',flush=True)
+    elif object_ids:
         print('Alerts enabled for types observed during reported cube encounters; other cube variants may be missing.',flush=True)
     if not ids and args.discover:
         print("DISCOVERY MODE: no cube IDs verified. Spawns are candidates, not confirmed cubes.", flush=True)

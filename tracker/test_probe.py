@@ -20,6 +20,19 @@ class ProbeTests(unittest.TestCase):
             publisher.heartbeat()
             self.assertFalse(json.loads(path.read_text())['running'])
 
+    def test_short_spawn_recovers_recorded_partial_cube_header(self):
+        message={'type':'41 36','name':'Spawn','payload':'f4 b3 01 04 2c 00 cb 0b 20 00 00 02 12 2f b5 c7 74 96 5d 47 00 88 47 46 00 98 b2 43 00 fe 01 94 a7 07 94 a7 07 64 00 00 00 04 00 0c 02 00 00 14 00 00 04 00 1c 01 19 00 d3 00 00 00 06 00 01 00 19 00 00 00 22 4e 20 00 f1 16 fb d6 3d 32 a1 01 00 00 83 b0 1f a9 00 3d 34 36 c4 99 02 04 00 a7 4f 12 00 00 e3 bb c7 00 4f 4d 47 00 8c 55 46 3b 00 91 00 00 00 01 01','t':1000,'event':{'NPC':999}}
+        recovered=recover_cube_frames(message,{1200039})
+        self.assertEqual(len(recovered),1)
+        self.assertTrue(recovered[0]['partial_header'])
+        self.probe.object_ids={1200039}
+        self.probe.process(message)
+        self.assertIn(36036,self.probe.active_cubes)
+        self.assertEqual(self.probe.counts['alerts'],1)
+        self.assertEqual(recover_cube_frames(message,{1200040}),[])
+        wrong=dict(message,payload=message['payload'].replace('3d 34 36','3e 34 36'))
+        self.assertEqual(recover_cube_frames(wrong,{1200039}),[])
+
     def test_invalid_self_never_clears_valid_character(self):
         self.probe.track_player({'name':'Self','event':{'Entity':11294,'Name':'TestPlayer','Self':True},'t':0})
         self.probe.player_position=(1,2,3);self.probe.position_time=1

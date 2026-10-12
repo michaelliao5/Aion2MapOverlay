@@ -66,8 +66,8 @@ public static class LiveCubeFeed
             var markers = new List<(double, double, string, string)>();
             foreach (var cube in state.Cubes)
             {
-                // Observed Elyos types plus two user-enabled trial candidates.
-                if (cube.Type is not (1200039 or 1200040 or 1200041 or 1200008 or 1200078)) continue;
+                // User-enabled trial whitelist: 1200000 through 1200099.
+                if (cube.Type < 1200000 || cube.Type > 1200099) continue;
                 if (!double.IsFinite(cube.X) || !double.IsFinite(cube.Y) || Math.Abs(cube.X) > 10000000 || Math.Abs(cube.Y) > 10000000) continue;
                 var point = Calibration.Project(cube.X, cube.Y);
                 if (point.X < 0 || point.Y < 0 || point.X >= mapSize || point.Y >= mapSize) continue;

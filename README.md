@@ -18,6 +18,8 @@ The detector publishes a heartbeat every five seconds. Missing game packets hide
 
 See scripts/build.ps1 for release assembly. See THIRD_PARTY.md before public binary releases. No raw captures, screenshots, compiled binaries or credentials belong in this repository. This is a hardened local beta, not a complete or calibrated game-world tracker.
 
-Trial types 1200008 and 1200078 are enabled at user request following unopened sightings. These are unconfirmed and may produce false positives.
+The user-enabled trial whitelist covers 1200000 through 1200099 inclusive. Aside from observed cube types 1200039, 1200040 and 1200041, these types are unconfirmed and can produce non-cube alerts.
 
 Observed cube types: 1200039, 1200040, 1200041, and rift type 1301199 (not projected on this Elyos map). The 1200040 collection matched earlier cube completion/removal signatures. Trial IDs remain distinct from that evidence.
+
+The standalone Python tracker and live overlay can be launched separately. The production launcher is optional. Recovery also handles the recorded 61-byte object frame whose complete coordinate header was swallowed by a short decoded NPC Spawn packet; missing metadata is explicitly labeled. This path still requires a configured type, nonzero entity, flags 4 and plausible coordinates.
