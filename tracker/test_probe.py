@@ -93,6 +93,15 @@ class ProbeTests(unittest.TestCase):
         wrong_size=dict(message,payload=message['payload'].replace('3d 34 36','3e 34 36'))
         self.assertEqual(recover_cube_frames(wrong_size,{1200039}),[])
 
+    def test_new_cube_voice_works_without_position_and_duplicates_stay_silent(self):
+        spoken=[];self.probe.on_voice=spoken.append;self.probe.object_ids={1200041}
+        self.probe.process({'type':'34 36','payload':self.OBJECT_PACKET,'t':1000})
+        self.probe.process({'type':'34 36','payload':self.OBJECT_PACKET,'t':2000})
+        second=self.OBJECT_PACKET.replace('9d ad 02','9e ad 02',1)
+        self.probe.process({'type':'34 36','payload':second,'t':3000})
+        self.assertEqual(spoken,['Cube found. Position tracking unavailable.','Cube found. '])
+        self.assertIsNone(self.probe.player_position)
+
     def test_invalid_self_never_clears_valid_character(self):
         self.probe.track_player({'name':'Self','event':{'Entity':11294,'Name':'TestPlayer','Self':True},'t':0})
         self.probe.player_position=(1,2,3);self.probe.position_time=1

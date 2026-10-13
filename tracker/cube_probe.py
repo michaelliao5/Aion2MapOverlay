@@ -345,8 +345,8 @@ class Probe:
         if not self.on_voice:return
         prefix='Cube found. ' if found else ''
         if self.player_position is None or self.position_time is None or not 0<=now-self.position_time<=5000:
-            if found and not self.position_warning_spoken:
-                self.on_voice(prefix+'Position tracking unavailable.')
+            if found:
+                self.on_voice(prefix+('Position tracking unavailable.' if not self.position_warning_spoken else ''))
                 self.position_warning_spoken=True
             return
         dx,dy,dz=[obj[k]-p for k,p in zip(('X','Y','Z'),self.player_position)]
