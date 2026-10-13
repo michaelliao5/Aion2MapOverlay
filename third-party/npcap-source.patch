@@ -166,16 +166,47 @@ index 86bc2a8..5f7cb0a 100644
  
  package capture
  
+diff --git a/cmd/a2k/player_payload_test.go b/cmd/a2k/player_payload_test.go
+new file mode 100644
+index 0000000..af991a7
+--- /dev/null
++++ b/cmd/a2k/player_payload_test.go
+@@ -0,0 +1,25 @@
++package main
++
++import (
++	"encoding/json"
++	"github.com/nuriland/a2kit"
++	"github.com/nuriland/a2kit/game"
++	"github.com/nuriland/a2kit/wire"
++	"testing"
++	"time"
++)
++
++func TestDecodedPlayerPreservesRawPayload(t *testing.T) {
++	message := a2kit.Message{Frame: wire.Frame{Opcode: 0x3645, Payload: []byte{0x34, 0x36, 0x01}}, Event: game.Player{Entity: 7, Name: "TestPlayer"}}
++	var line map[string]json.RawMessage
++	if err := json.Unmarshal(marshal(message, time.Time{}), &line); err != nil {
++		t.Fatal(err)
++	}
++	var payload string
++	if err := json.Unmarshal(line["payload"], &payload); err != nil {
++		t.Fatal(err)
++	}
++	if payload != "34 36 01" {
++		t.Fatalf("raw Player bytes lost: %q", payload)
++	}
++}
 diff --git a/cmd/a2k/print.go b/cmd/a2k/print.go
-index 844bbfe..0feead8 100644
+index 844bbfe..aeace9f 100644
 --- a/cmd/a2k/print.go
 +++ b/cmd/a2k/print.go
 @@ -169,6 +169,10 @@ type jsonLine struct {
  func marshal(m a2kit.Message, t0 time.Time) []byte {
  	l := jsonLine{T: m.Time.Sub(t0).Milliseconds(), TS: m.Time.UTC(), Type: m.Opcode, Flags: m.Flags, Name: typeName(m)}
  	err := m.Err
-+	// Preserve spawn bytes so the probe can explicitly decode the current two-byte mask layout.
-+	if l.Name == "Spawn" || l.Name == "Self" || m.Opcode == 0x382A {
++	// Preserve raw actor bytes for probe layouts and validated embedded object recovery.
++	if l.Name == "Spawn" || l.Name == "Self" || l.Name == "Player" || m.Opcode == 0x382A {
 +		l.Payload = fmt.Sprintf("% x", m.Payload)
 +	}
  	if err == nil {
@@ -194,6 +225,40 @@ index bf60053..4c64a52 100644
  	rd := a2kit.New(d, &stream{r: r, buf: make([]byte, 1<<16)})
  	rd.Source = a2log.Source{Kind: "feed", Path: name}
  	return rd, nil
+diff --git a/wire/cube_framing_test.go b/wire/cube_framing_test.go
+new file mode 100644
+index 0000000..ead397e
+--- /dev/null
++++ b/wire/cube_framing_test.go
+@@ -0,0 +1,28 @@
++package wire
++
++import (
++ "encoding/binary"
++ "testing"
++ "github.com/nuriland/a2kit/internal/wiretest"
++)
++
++func TestStrictFamiliesRecoversObjectInsideBogusAlignedFrame(t *testing.T) {
++ d:=NewDecoder(Config{EmitUnlocked:true,StrictFamilies:true})
++ stream:=wiretest.AppendFrame(nil,0x00,0x36,8)
++ stream=wiretest.AppendFrame(stream,0x00,0x36,8)
++ stream=wiretest.AppendFrame(stream,0x00,0x36,8)
++ body:=[]byte{0xBE,0x46}
++ body=append(body,make([]byte,100)...)
++ body=wiretest.AppendFrame(body,0x34,0x36,24)
++ body=wiretest.AppendFrame(body,0x00,0x36,8)
++ body=wiretest.AppendFrame(body,0x00,0x36,8)
++ stream=binary.AppendUvarint(stream,uint64(len(body)+4))
++ stream=append(stream,body...)
++ feed(d,stream);d.Flush()
++ found:=false
++ for frame:=range d.Frames(){
++  if frame.Opcode==0x46BE {t.Fatal("bogus frame swallowed object")}
++  if frame.Opcode==0x3634 {found=true}
++ }
++ if !found {t.Fatal("object frame not recovered")}
++}
 diff --git a/wire/decoder.go b/wire/decoder.go
 index ca7346c..0ef17c5 100644
 --- a/wire/decoder.go

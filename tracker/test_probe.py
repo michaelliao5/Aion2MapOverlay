@@ -78,6 +78,21 @@ class ProbeTests(unittest.TestCase):
         self.probe.process({'type':'35 36','payload':'b5 bc 03 04 03 00','t':2000})
         self.assertEqual(spoken,['Cube no longer nearby.'])
 
+    def test_player_packet_recovers_cube_header_despite_damaged_following_frame(self):
+        message={'type':'45 36','name':'Player','event':{'Entity':1,'Name':'TestPlayer'},'payload':'aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa 3d 34 36 e3 da 01 04 00 a7 4f 12 00 55 c3 29 c7 b0 9c 8f 47 00 7c 2e 46 3d 00 92 28 2a 43 01 01 01 4b e3 b7 7b 06 03 02 00 f4 00 48 98 95 01 07 00 00 13 3a 36 95 ba 01 9d 57 65 03 f0 13 09 6d 8d 95 ba 01 14 00 8d a1 75 01 02 03 74 98 02 00 06 c8 a9 01 00 0e 00 36 1a fa b7','t':2000}
+        recovered=recover_cube_frames(message,{1200039})
+        self.assertEqual(len(recovered),1)
+        self.assertTrue(recovered[0]['player_header'])
+        self.probe.object_ids={1200039}
+        self.probe.process(message)
+        self.assertIn(28003,self.probe.active_cubes)
+        self.assertAlmostEqual(self.probe.active_cubes[28003]['X'],-43459.33203125)
+        self.assertEqual(recover_cube_frames(message,{1200040}),[])
+        wrong_parent=dict(message,type='13 96',name=None)
+        self.assertEqual(recover_cube_frames(wrong_parent,{1200039}),[])
+        wrong_size=dict(message,payload=message['payload'].replace('3d 34 36','3e 34 36'))
+        self.assertEqual(recover_cube_frames(wrong_size,{1200039}),[])
+
     def test_invalid_self_never_clears_valid_character(self):
         self.probe.track_player({'name':'Self','event':{'Entity':11294,'Name':'TestPlayer','Self':True},'t':0})
         self.probe.player_position=(1,2,3);self.probe.position_time=1

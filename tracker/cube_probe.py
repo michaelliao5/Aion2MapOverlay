@@ -11,7 +11,9 @@ import os
 from pathlib import Path
 
 ROOT = Path(sys.executable).resolve().parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parent
-BACKEND = ROOT / 'bin' / 'a2k-fixed.exe'
+BACKEND = ROOT / 'bin' / 'a2k-fixed-v2.exe'
+if not BACKEND.is_file():
+    BACKEND = ROOT / 'bin' / 'a2k-fixed.exe'
 if not BACKEND.is_file():
     BACKEND = ROOT / 'bin' / 'a2k.exe'
 
@@ -135,23 +137,34 @@ def recover_cube_frames(message,known_ids):
                 end=start+size+head-4
                 if head!=width or not 24<=size<=2048 or end<=i+20:continue
                 partial=end>len(data)
+                player_header=message.get('type')=='45 36' and message.get('name')=='Player' and size==61 and head==1 and len(data)>=256
+                header_only=False
                 if partial:
-                    # Observed Spawn framing swallowed a complete cube header,
-                    # but not the remaining object metadata. Restrict this case
-                    # to the observed 61-byte frame and a known complete header.
-                    if message.get('type')!='41 36' or message.get('name')!='Spawn' or size!=61 or len(data)-(i+2)<21:continue
-                    end=len(data)
+                    if message.get('type')=='41 36' and message.get('name')=='Spawn' and size==61 and len(data)-(i+2)>=21:
+                        end=len(data)
+                    elif player_header:header_only=True
+                    else:continue
+                boundary_ok=True
                 if end<len(data):
                     following=end
                     while following<len(data) and data[following]==0:following+=1
                     if following<len(data):
-                        next_size,next_head=var_at(following)
-                        if not 6<=next_size<=16384 or following+next_head+2>len(data) or data[following+next_head+1] not in families:continue
-                        if following+next_size+next_head-4>len(data):continue
+                        try:
+                            next_size,next_head=var_at(following)
+                            boundary_ok=6<=next_size<=16384 and following+next_head+2<=len(data) and data[following+next_head+1] in families and following+next_size+next_head-4<=len(data)
+                        except ValueError:boundary_ok=False
+                if not boundary_ok:
+                    if player_header:header_only=True
+                    else:continue
+                if header_only:
+                    _,entity_width=var_at(i+2)
+                    end=i+2+entity_width+18
+                    if end>len(data):continue
+                    partial=True
                 payload=data[i+2:end]
                 obj=decode_object(payload.hex())
                 if obj['Flags']!=4 or obj['Entity']==0 or obj['Type'] not in known_ids:continue
-                recovered.append({'type':'34 36','payload':payload.hex(),'t':message.get('t',0),'recovered':True,'partial_header':partial,'_offset':i})
+                recovered.append({'type':'34 36','payload':payload.hex(),'t':message.get('t',0),'recovered':True,'partial_header':partial,'player_header':header_only,'_offset':i})
                 break
             except (ValueError,IndexError):continue
     return recovered
