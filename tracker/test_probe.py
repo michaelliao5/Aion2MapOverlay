@@ -1,7 +1,7 @@
 import unittest
 import tempfile
 from pathlib import Path
-from cube_probe import Probe, decode_spawn, decode_object, available_recording_path, recover_cube_frames, CubeStatePublisher, recover_position_frames
+from cube_probe import Probe, decode_spawn, decode_object, available_recording_path, recover_cube_frames, CubeStatePublisher, recover_position_frames, recover_lifecycle_frames
 
 
 class ProbeTests(unittest.TestCase):
@@ -32,6 +32,51 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(recover_cube_frames(message,{1200040}),[])
         wrong=dict(message,payload=message['payload'].replace('3d 34 36','3e 34 36'))
         self.assertEqual(recover_cube_frames(wrong,{1200039}),[])
+
+    def test_collection_completion_stops_guidance_immediately(self):
+        spoken=[];self.probe.on_voice=spoken.append
+        self.probe.active_cubes[56885]={'Entity':56885,'Type':1200039,'X':1,'Y':2,'Z':3}
+        self.probe.process({'type':'3A 36','payload':'b5 bc 03 e3 51 01 00 00 00 23 c5 9a 25','t':2000})
+        self.assertNotIn(56885,self.probe.active_cubes)
+        self.assertEqual(spoken,['Cube no longer nearby.'])
+        self.probe.process({'type':'3A 36','payload':'b5 bc 03 e3 51 01 00 00 00 23 c5 9a 25','t':2001})
+        self.assertEqual(len(spoken),1)
+
+    def test_recorded_embedded_removal_clears_only_matching_cube(self):
+        message={'type':'E6 97','payload':'b3 4a 96 99 15 5b a7 45 95 a5 e1 05 22 03 d0 98 03 05 23 34 1a 20 37 d7 16 03 fd ef e1 0b 8e db 74 0d c2 c4 ce 9a c3 41 c4 0b c4 0c 38 36 a3 ab 02 c7 6a 01 0c 35 36 b5 bc 03 04 03 00 0e 00 36 f1 1b 11 33 a1 01 00 00 05 25 01 01','t':2000}
+        frames=recover_lifecycle_frames(message,{56885})
+        self.assertEqual(len(frames),1)
+        self.probe.active_cubes[56885]={'Entity':56885,'Type':1200039,'X':1,'Y':2,'Z':3}
+        self.probe.active_cubes[7]={'Entity':7,'Type':1200041,'X':1,'Y':2,'Z':3}
+        self.probe.process(message)
+        self.assertNotIn(56885,self.probe.active_cubes)
+        self.assertIn(7,self.probe.active_cubes)
+        self.assertEqual(recover_lifecycle_frames(message,{7}),[])
+        bad=dict(message,payload=message['payload'].replace('0c 35 36','0d 35 36'))
+        self.assertEqual(recover_lifecycle_frames(bad,{56885}),[])
+
+    def test_other_completion_signature_does_not_clear_cube(self):
+        self.probe.active_cubes[56885]={'Entity':56885,'Type':1200039,'X':1,'Y':2,'Z':3}
+        self.probe.process({'type':'3A 36','payload':'b5 bc 03 e3 51 01 00 00 00 00 00 00 00','t':2000})
+        self.assertIn(56885,self.probe.active_cubes)
+
+    def test_removal_feed_is_published_without_one_second_delay(self):
+        import json
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'state.json';publisher=CubeStatePublisher(path)
+            self.probe.active_cubes[1]={'Entity':1,'Type':1200041,'X':1,'Y':2,'Z':3}
+            publisher.publish(self.probe,force=True)
+            self.probe.active_cubes.clear()
+            publisher.publish(self.probe)
+            self.assertEqual(json.loads(path.read_text())['cubes'],[])
+
+    def test_direct_removal_clears_before_spoken_direction_update(self):
+        spoken=[];self.probe.on_voice=spoken.append
+        self.probe.player_position=(0,0,0);self.probe.position_time=2000
+        self.probe.north_axis='-Y';self.probe.east_axis='+X'
+        self.probe.active_cubes[56885]={'Entity':56885,'Type':1200039,'X':1000,'Y':1000,'Z':0}
+        self.probe.process({'type':'35 36','payload':'b5 bc 03 04 03 00','t':2000})
+        self.assertEqual(spoken,['Cube no longer nearby.'])
 
     def test_invalid_self_never_clears_valid_character(self):
         self.probe.track_player({'name':'Self','event':{'Entity':11294,'Name':'TestPlayer','Self':True},'t':0})

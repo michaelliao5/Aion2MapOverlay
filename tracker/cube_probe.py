@@ -44,7 +44,9 @@ class CubeStatePublisher:
     def publish(self,probe,running=True,force=False):
         with self.lock:
             now=time.monotonic()
-            if not force and now-self.last_write<1 and probe.counts['alerts']==self.last_alerts:return
+            entities=set(probe.active_cubes)
+            published_entities={obj['Entity'] for obj in self.state['cubes']} if self.state else set()
+            if not force and now-self.last_write<1 and probe.counts['alerts']==self.last_alerts and entities==published_entities:return
             self.state={'schema':'cube-state/v1','updated_at':time.time(),'last_message_at':time.time(),'running':running,'cubes':[{k:obj[k] for k in ('Entity','Type','X','Y','Z')} for obj in probe.active_cubes.values()] if running else []}
             self._write(self.state)
             self.last_write=now;self.last_alerts=probe.counts['alerts']
@@ -149,10 +151,63 @@ def recover_cube_frames(message,known_ids):
                 payload=data[i+2:end]
                 obj=decode_object(payload.hex())
                 if obj['Flags']!=4 or obj['Entity']==0 or obj['Type'] not in known_ids:continue
-                recovered.append({'type':'34 36','payload':payload.hex(),'t':message.get('t',0),'recovered':True,'partial_header':partial})
+                recovered.append({'type':'34 36','payload':payload.hex(),'t':message.get('t',0),'recovered':True,'partial_header':partial,'_offset':i})
                 break
             except (ValueError,IndexError):continue
     return recovered
+
+
+def lifecycle_entity(opcode,data):
+    def readvar(start):
+        entity=0
+        for i in range(5):
+            if start+i>=len(data):raise ValueError()
+            b=data[start+i];entity|=(b&127)<<(i*7)
+            if b<128:return entity,start+i+1
+        raise ValueError()
+    try:
+        entity,end=readvar(0)
+        if entity<=0:return None
+        if opcode=='35 36' and data[end:] in (b'\x04\x03\x00',b'\x01\x01\x00'):return entity
+        if opcode=='3A 36':
+            actor,end=readvar(end)
+            if actor>0 and data[end:]==bytes.fromhex('01 00 00 00 23 c5 9a 25'):return entity
+    except ValueError:pass
+    return None
+
+
+def recover_lifecycle_frames(message,active_entities):
+    if message.get('recovered') or not active_entities or not message.get('payload'):return []
+    try:data=bytes.fromhex(message['payload'])
+    except ValueError:return []
+    def var(start):
+        n=0
+        for width in range(1,6):
+            if start+width>len(data):raise ValueError()
+            b=data[start+width-1];n|=(b&127)<<(7*(width-1))
+            if b<128:return n,width
+        raise ValueError()
+    frames=[]
+    for marker in (b'\x35\x36',b'\x3a\x36'):
+        offset=0
+        while (i:=data.find(marker,offset))>=0:
+            offset=i+2
+            for width in (1,2,3):
+                start=i-width
+                if start<0:continue
+                try:
+                    size,head=var(start);end=start+size+head-4
+                    if head!=width or not 6<=size<=64 or end>len(data) or end<=i+2:continue
+                    following=end
+                    while following<len(data) and data[following]==0:following+=1
+                    if following<len(data):
+                        n,h=var(following)
+                        if n<6 or following+h+2>len(data) or data[following+h+1] not in (0x36,0x37,0x38,0x39,0x56,0x8A,0x8D,0x92,0x96,0x97) or following+n+h-4>len(data):continue
+                    payload=data[i+2:end];opcode=marker.hex(' ').upper()
+                    if lifecycle_entity(opcode,payload) not in active_entities:continue
+                    frames.append({'type':opcode,'payload':payload.hex(),'t':message.get('t',0),'recovered':True,'_offset':i});break
+                except (ValueError,IndexError):continue
+    return frames
 
 
 def decode_spawn(payload, mask_bytes=2):
@@ -228,6 +283,7 @@ def recover_position_frames(message):
                         _,entity_width=var(i+2)
                         if len(payload)!=entity_width+16 or payload[-2:]!=b'\x01\x00':continue
                     elif len(payload)<42 or len(payload)>128:continue
+                    frame['_offset']=i
                     result.append((i,frame));break
                 except (ValueError,IndexError):continue
     return [frame for _,frame in sorted(result,key=lambda item:item[0])]
@@ -340,10 +396,21 @@ class Probe:
                 self.position_warning_spoken=False
 
     def process(self, message):
-        for position_frame in recover_position_frames(message):
-            self.process(position_frame)
-        for recovered in recover_cube_frames(message,self.object_ids):
-            self.process(recovered)
+        recovered = recover_position_frames(message) + recover_cube_frames(message,self.object_ids)
+        entities=set(self.active_cubes)
+        for frame in recovered:
+            if frame['type']=='34 36':
+                try:entities.add(decode_object(frame['payload'])['Entity'])
+                except ValueError:pass
+        recovered += recover_lifecycle_frames(message,entities)
+        for frame in sorted(recovered,key=lambda frame:frame.get('_offset',0)):
+            self.process(frame)
+        if message.get('type') in ('3A 36','35 36') and message.get('payload'):
+            try:entity=lifecycle_entity(message['type'],bytes.fromhex(message['payload']))
+            except ValueError:entity=None
+            if entity in self.active_cubes:
+                self.active_cubes.pop(entity)
+                if self.on_voice:self.on_voice('Cube no longer nearby.')
         self.track_player(message)
         now=message.get('t',0)
         if message.get('name') in ('Zone','Redirect'):
