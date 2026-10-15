@@ -78,7 +78,7 @@ public partial class OverlayWindow : System.Windows.Window
             Faction.Abyss => "ABYSS (심연/深淵)",
             _ => "UNKNOWN"
         };
-        FactionText.Text = factionName;
+
 
         LoadData();
         _timer.Start();
@@ -149,7 +149,7 @@ public partial class OverlayWindow : System.Windows.Window
 
         Dispatcher.Invoke(() =>
         {
-            FactionText.Text = factionName;
+    
             ClearMarkers();
         });
 
@@ -196,15 +196,15 @@ public partial class OverlayWindow : System.Windows.Window
 
     private void Timer_Tick(object? sender, EventArgs e)
     {
-        if (_matcher == null)
-            return;
-
         _frameCount++;
 
         try
         {
-            _markers = LiveCubeFeed.Read(_matcher.MapSize);
-            if (!LiveCubeFeed.Ready || _markers.Count == 0)
+            _markers = LiveCubeFeed.Read(_matcher?.MapSize ?? 8192);
+            CubeBanner.Visibility = LiveCubeFeed.Ready && LiveCubeFeed.ActiveCubeCount > 0 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+            CubeCountText.Text = $"{LiveCubeFeed.ActiveCubeCount} cubes nearby";
+            CubeCountText.Visibility = LiveCubeFeed.ActiveCubeCount > 1 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+            if (!LiveCubeFeed.Ready || _markers.Count == 0 || _matcher == null)
             {
                 ClearMarkers();
                 UpdateStatus(0, 0, LiveCubeFeed.Status);
@@ -333,15 +333,23 @@ public partial class OverlayWindow : System.Windows.Window
 
     private void UpdateStatus(int matchCount, double confidence, string status)
     {
-        try { System.IO.File.WriteAllText(System.IO.Path.Combine(AppContext.BaseDirectory, "overlay-status.json"), System.Text.Json.JsonSerializer.Serialize(new { updated_at = DateTimeOffset.UtcNow, matchCount, confidence, status, markerCount = _markerElements.Count, feedPath = LiveCubeFeed.StatePath, lastCandidate = _lastCandidateDiagnostic })); } catch (System.IO.IOException) { }
-        if (confidence >= 0.7)
-            StatusIndicator.Fill = WpfBrushes.Lime;
-        else if (confidence >= 0.5)
-            StatusIndicator.Fill = WpfBrushes.Yellow;
-        else
-            StatusIndicator.Fill = WpfBrushes.Red;
+        try { System.IO.File.WriteAllText(System.IO.Path.Combine(AppContext.BaseDirectory, "overlay-status.json"), System.Text.Json.JsonSerializer.Serialize(new { updated_at = DateTimeOffset.UtcNow, matchCount, confidence, status, markerCount = _markerElements.Count, feedPath = LiveCubeFeed.StatePath, lastCandidate = _lastCandidateDiagnostic, bannerVisible = CubeBanner.Visibility == System.Windows.Visibility.Visible, activeCubeCount = LiveCubeFeed.ActiveCubeCount })); } catch (System.IO.IOException) { }
 
-        MatchCountText.Text = $"M:{matchCount} C:{confidence:P0} {status} [{_currentFps:F1}fps]";
+    }
+
+    public void RenderBannerPreview()
+    {
+        CubeBanner.Visibility = System.Windows.Visibility.Visible;
+        var content = (System.Windows.FrameworkElement)Content;
+        content.Measure(new System.Windows.Size(1920,1080));
+        content.Arrange(new System.Windows.Rect(0,0,1920,1080));
+        content.UpdateLayout();
+        var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(1920,1080,96,96,System.Windows.Media.PixelFormats.Pbgra32);
+        bitmap.Render(content);
+        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
+        using var file = System.IO.File.Create(System.IO.Path.Combine(AppContext.BaseDirectory,"banner-preview.png"));
+        encoder.Save(file);
     }
 
     private void UpdateFps()

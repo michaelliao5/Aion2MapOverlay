@@ -38,17 +38,15 @@ public static class LiveCubeFeed
     public static MapCalibration Calibration { get; private set; } = new();
     public static string Status { get; private set; } = "Waiting for detector";
     public static bool Ready { get; private set; }
+    public static int ActiveCubeCount { get; private set; }
     private static readonly JsonSerializerOptions Options = new() { PropertyNameCaseInsensitive = true };
 
     public static List<(double LeafletX, double LeafletY, string Name, string Subtype)> Read(int mapSize)
     {
         Ready = false;
+        ActiveCubeCount = 0;
         try
         {
-            if (File.Exists(CalibrationPath))
-                Calibration = JsonSerializer.Deserialize<MapCalibration>(File.ReadAllText(CalibrationPath), Options) ?? new();
-            if (!double.IsFinite(Calibration.ScaleX) || !double.IsFinite(Calibration.ScaleY) || Calibration.ScaleX == 0 || Calibration.ScaleY == 0 || !double.IsFinite(Calibration.OffsetX) || !double.IsFinite(Calibration.OffsetY))
-                throw new InvalidDataException("Invalid calibration");
             using var file = new FileStream(StatePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             var state = JsonSerializer.Deserialize<CubeState>(file, Options);
             double age = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0 - (state?.UpdatedAt ?? 0);
@@ -63,8 +61,14 @@ public static class LiveCubeFeed
                 return [];
             }
             Ready = true;
+            ActiveCubeCount = state.Cubes?.Count(cube => cube.Entity > 0 && cube.Type is (1200039 or 1200040 or 1200041 or 1301199)) ?? 0;
+            if (File.Exists(CalibrationPath))
+                Calibration = JsonSerializer.Deserialize<MapCalibration>(File.ReadAllText(CalibrationPath), Options) ?? new();
+            if (!double.IsFinite(Calibration.ScaleX) || !double.IsFinite(Calibration.ScaleY) || Calibration.ScaleX == 0 || Calibration.ScaleY == 0 || !double.IsFinite(Calibration.OffsetX) || !double.IsFinite(Calibration.OffsetY))
+                throw new InvalidDataException("Invalid calibration");
+
             var markers = new List<(double, double, string, string)>();
-            foreach (var cube in state.Cubes)
+            foreach (var cube in state.Cubes ?? [])
             {
                 // Only observed Elyos cube types; unconfirmed whitelist disabled.
                 if (cube.Type is not (1200039 or 1200040 or 1200041)) continue;

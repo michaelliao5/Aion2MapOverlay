@@ -8,6 +8,12 @@ public partial class App : System.Windows.Application
         int stateIndex = Array.IndexOf(e.Args, "--state");
         if (stateIndex >= 0 && stateIndex + 1 < e.Args.Length)
             LiveCubeFeed.StatePath = System.IO.Path.GetFullPath(e.Args[stateIndex + 1]);
+        if (e.Args.Contains("--render-banner"))
+        {
+            var preview = new OverlayWindow(Models.Faction.Elyos, new Models.MarkerFilter());
+            preview.RenderBannerPreview();
+            Shutdown(0); return;
+        }
         if (e.Args.Contains("--match-recording"))
         {
             int index = Array.IndexOf(e.Args, "--match-recording");
