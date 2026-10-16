@@ -21,7 +21,7 @@ Copy-Item (Join-Path $sourceRoot 'tracker\cube_ids.json'),(Join-Path $sourceRoot
 Copy-Item (Join-Path $sourceRoot 'third-party\LICENSE.*') (Join-Path $trackerOutput 'bin')
 Copy-Item (Join-Path $sourceRoot 'runtime\*') $OutputDirectory
 Copy-Item (Join-Path $sourceRoot 'map-calibration.json') $overlayOutput
-Copy-Item (Join-Path $sourceRoot 'README.md'),(Join-Path $sourceRoot 'THIRD_PARTY.md') $OutputDirectory
+Copy-Item (Join-Path $sourceRoot 'README.md'),(Join-Path $sourceRoot 'USER_GUIDE.md'),(Join-Path $sourceRoot 'THIRD_PARTY.md') $OutputDirectory
 $notices = Join-Path $OutputDirectory 'licenses'
 New-Item -ItemType Directory -Force -Path $notices | Out-Null
 $pythonLicense = python -c "import sys; from pathlib import Path; print(Path(sys.base_prefix)/'LICENSE.txt')"
