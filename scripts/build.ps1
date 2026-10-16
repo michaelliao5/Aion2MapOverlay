@@ -22,8 +22,17 @@ Copy-Item (Join-Path $sourceRoot 'third-party\LICENSE.*') (Join-Path $trackerOut
 Copy-Item (Join-Path $sourceRoot 'runtime\*') $OutputDirectory
 Copy-Item (Join-Path $sourceRoot 'map-calibration.json') $overlayOutput
 Copy-Item (Join-Path $sourceRoot 'README.md'),(Join-Path $sourceRoot 'THIRD_PARTY.md') $OutputDirectory
+$notices = Join-Path $OutputDirectory 'licenses'
+New-Item -ItemType Directory -Force -Path $notices | Out-Null
+$pythonLicense = python -c "import sys; from pathlib import Path; print(Path(sys.base_prefix)/'LICENSE.txt')"
+$pyinstallerLicense = python -c "import importlib.metadata; print(importlib.metadata.distribution('pyinstaller').locate_file('pyinstaller-6.22.3.dist-info/licenses/COPYING.txt'))"
+Copy-Item -LiteralPath $pythonLicense -Destination (Join-Path $notices 'Python.txt')
+Copy-Item -LiteralPath $pyinstallerLicense -Destination (Join-Path $notices 'PyInstaller.txt')
+Copy-Item (Join-Path $sourceRoot 'third-party\LICENSE.*') $notices
 $check = Start-Process -FilePath (Join-Path $overlayOutput 'Aion2MapOverlay.exe') -ArgumentList '--self-test' -PassThru -WindowStyle Hidden
 $check.WaitForExit()
 if ($check.ExitCode -ne 0) { throw 'Overlay self-test failed.' }
+python (Join-Path $sourceRoot 'scripts\check-integration.py') (Join-Path $overlayOutput 'Aion2MapOverlay.exe')
+if ($LASTEXITCODE -ne 0) { throw 'Tracker/overlay integration failed.' }
 & (Join-Path $OutputDirectory 'Start.ps1') -ValidateOnly
-Write-Output "Local release ready: $OutputDirectory. Include Python and PyInstaller runtime notices before redistribution."
+Write-Output "Release ready: $OutputDirectory"

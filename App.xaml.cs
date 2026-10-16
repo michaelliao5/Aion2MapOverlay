@@ -8,6 +8,16 @@ public partial class App : System.Windows.Application
         int stateIndex = Array.IndexOf(e.Args, "--state");
         if (stateIndex >= 0 && stateIndex + 1 < e.Args.Length)
             LiveCubeFeed.StatePath = System.IO.Path.GetFullPath(e.Args[stateIndex + 1]);
+        if (e.Args.Contains("--check-feed"))
+        {
+            int reportIndex = Array.IndexOf(e.Args, "--report");
+            if (reportIndex < 0 || reportIndex + 1 >= e.Args.Length) { Shutdown(2); return; }
+            var markers = LiveCubeFeed.Read(8192);
+            var checkWindow = new OverlayWindow(Models.Faction.Elyos, new Models.MarkerFilter());
+            bool bannerVisible = checkWindow.UpdateCubeBanner();
+            System.IO.File.WriteAllText(e.Args[reportIndex + 1], System.Text.Json.JsonSerializer.Serialize(new { ready = LiveCubeFeed.Ready, count = LiveCubeFeed.ActiveCubeCount, bannerVisible, markerCount = markers.Count, status = LiveCubeFeed.Status }));
+            Shutdown(0); return;
+        }
         if (e.Args.Contains("--render-banner"))
         {
             var preview = new OverlayWindow(Models.Faction.Elyos, new Models.MarkerFilter());

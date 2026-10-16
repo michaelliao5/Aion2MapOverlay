@@ -43,6 +43,7 @@ try {
         $trackerProcess.Refresh(); $overlayProcess.Refresh()
     }
     if ($trackerProcess.HasExited -and $trackerProcess.ExitCode -ne 0 -and -not (Test-Path -LiteralPath $stopFile)) { throw "Tracker exited with code $($trackerProcess.ExitCode). See logs\tracker-$stamp.err.log." }
+    if ($overlayProcess.HasExited -and $overlayProcess.ExitCode -ne 0 -and -not (Test-Path -LiteralPath $stopFile)) { throw "Overlay exited with code $($overlayProcess.ExitCode). See overlay diagnostics." }
 } finally {
     if ($ownsMutex) {
         Set-Content -LiteralPath $stopFile -Value 'stop' -Encoding ascii

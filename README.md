@@ -1,45 +1,37 @@
-# AION 2 live cube map overlay
+# AION 2 live cube tracker + map overlay
 
-A local Windows companion that draws packet-detected cube candidates on the game's transparent map overlay. Based on hnomkeng/Aion2MapOverlay. This branch replaces static potential spawn markers with live detections and adds a tracker, spoken compass guidance, and a portable launcher.
+Portable Windows x64 companion with packet-based cube detection, a top-center **CUBE FOUND** banner, Windows sound, spoken compass guidance, and live markers on the transparent Elyos map.
 
-## Run the local release
+## Start
 
-Install Npcap from its official website once. Extract the release, stop the earlier prototype tracker and overlay, then double-click Start.cmd. Keep the transparent Elyos map visible on the primary display. Stop.cmd or exiting the overlay tray menu stops the managed tracker and overlay. Python and .NET are bundled. No game input automation or packet sending.
+1. Install [Npcap](https://npcap.com/) once.
+2. Download the ZIP from [Releases](https://github.com/michaelliao5/Aion2MapOverlay/releases) and extract it to a writable folder.
+3. Stop any older tracker/overlay, then double-click **Start.cmd**. It starts both programs and connects them automatically. Python and .NET are included.
+4. Start capture before entering the game world so player identity can be detected. Keep the game's transparent map in its default bottom-right position on the primary display for map markers.
+5. Double-click **Stop.cmd** to stop both, or exit through the overlay tray menu.
 
-settings.json saves voice/sound, adapter selection and world units per meter. Setting sound=false mutes both sound and voice. overlay/map-calibration.json controls world-to-map alignment. Defaults remain experimental. Raw packet-message recording is off by default; enable recordPackets only for investigation. Recordings and diagnostic logs stay in logs/; live state stays in state/. These contain game data and must not be uploaded without review. The launcher never starts with Windows automatically and does not install drivers.
+The display stays empty when there are no active cubes. The banner appears without a map match and disappears on collection, removal, stopped capture, or stale game traffic. Map markers additionally require a successful map match. No separate relay command is needed in this package.
 
-## Status and limitations
+## Settings and troubleshooting
 
-The detector publishes a heartbeat every five seconds. Missing game packets hide markers after 20 seconds and are reported separately from a stopped detector. Direction/distance require a player position no older than five seconds. Only experimentally observed cube types are recognized; catalogue and packet decoding remain incomplete. Elyos map matching is supported; Asmodian candidates are excluded from this map. Multi-monitor support and exact world-to-map calibration are not yet validated. Reported meters use an estimated 100 world units per meter.
+Edit `settings.json` while stopped. `sound=false` mutes sound and voice; `voice=false` keeps only the chime. Adapter selection is automatic unless `adapter` is specified. `unitsPerMeter` defaults to the estimated value 100. Raw game-message recording is disabled by default; enable `recordPackets` for investigating missed detections.
 
-## Develop
+The shared feed is `state/cube_state.json`; diagnostics are `overlay/overlay-status.json` and `logs/`. Keep captures and diagnostic data private. If there is no detection, inspect the tracker logs for recognized game traffic. If sound works but no map marker appears, inspect map matching diagnostics and keep the transparent map in its default location. A missing player position prevents direction/distance, but does not suppress a fresh cube announcement. Restart capture before entering the world rather than reusing an entity override from another session or zone.
 
-.NET 10 SDK and Python 3.14 are used by this local build. Run python -m unittest discover -s tracker -p test_probe.py. dotnet publish -c Release -r win-x64 --self-contained true builds the overlay. Aion2MapOverlay.exe --self-test checks feed filtering/freshness and reference-map projection. --match-recording PATH checks a locally provided grayscale/colour gameplay capture without saving a new screenshot; --diagnose explicitly captures a local diagnostic image.
+Recognized observed types are 1200039, 1200040, 1200041 and rift type 1301199. Only the three Elyos types project onto the Elyos map; rift detections still show the banner. The catalogue and protocol decoding are incomplete. World-to-map calibration and distance scale are provisional. Exact marker alignment and multiple monitors have not been validated. This is an experimental companion, with no guarantee of detecting every cube.
 
-See scripts/build.ps1 for release assembly. See THIRD_PARTY.md before public binary releases. No raw captures, screenshots, compiled binaries or credentials belong in this repository. This is a hardened local beta, not a complete or calibrated game-world tracker.
+## Build and verify
 
-The broad trial whitelist was disabled after noisy alerts. Live alerts use only types 1200039, 1200040, 1200041 and 1301199; the overlay filters to the three Elyos types. Unconfirmed IDs stay in offline mining reports.
+Use Windows x64, .NET 10 SDK, Python 3.14 and the pinned `tracker/requirements-build.txt`. Build the Npcap backend from the revision and patch in [THIRD_PARTY.md](THIRD_PARTY.md). Then run:
 
-Observed cube types: 1200039, 1200040, 1200041, and rift type 1301199 (not projected on this Elyos map). The 1200040 collection matched earlier cube completion/removal signatures. Trial IDs remain distinct from that evidence.
+```powershell
+./scripts/build.ps1 -BackendPath C:/path/to/a2k-fixed-v2.exe
+```
 
-The standalone Python tracker and live overlay can be launched separately. The production launcher is optional. Recovery also handles the recorded 61-byte object frame whose complete coordinate header was swallowed by a short decoded NPC Spawn packet; missing metadata is explicitly labeled. This path still requires a configured type, nonzero entity, flags 4 and plausible coordinates.
+The build runs Python regressions, overlay projection/feed self-tests, tracker-to-overlay integration checks, and launcher validation. `scripts/check-integration.py PATH_TO_OVERLAY_EXE` checks the actual state-file protocol and banner for empty, detected, collected, rift, stale and stopped states without showing synthetic cubes on your desktop.
 
-## Mine existing recordings
+For development, the Python tracker and overlay can still run separately; pass the same absolute state path using tracker `--map-state` and overlay `--state`. The launcher owns only the processes it starts and does not install drivers or start with Windows.
 
-Run python tracker/mine_cube_ids.py --folder PATH_TO_LOCAL_LOGS --output PATH_TO_REPORTS. The utility scans a2log captures, maps object appearances to collection signatures within each connection and zone, checks removal packets, and writes catalogue.json, encounters.csv and README.md locally. Session entity IDs are listed as evidence; reusable type IDs classify objects. It does not modify live alert settings and cannot enumerate types never sent to the client. The observed signature remains experimental. Reports and raw captures are not committed.
+Offline mining: `python tracker/mine_cube_ids.py --folder PATH_TO_LOGS --output PATH_TO_REPORTS`. This finds observed types from existing captures, not a complete game catalogue. Do not commit recordings, screenshots, credentials or generated state.
 
-The local scan of 27 recordings found 32 matching completion/removal sequences spanning types 1200039, 1200040, 1200041 and 1301199. Five completion signatures had no mapped appearance; those remain unresolved.
-
-## Transparent-map matching
-
-Matching focuses on the bottom-right transparent map (78?99.5% of desktop width, 63?98% of desktop height), with a 16000-feature reference budget. The saved gameplay capture passed with 26 matches and 71% confidence. Marker projection adds the crop origin before converting physical screen coordinates to overlay-local WPF coordinates. Synthetic corner-map regression matched within one pixel of the expected desktop point. This checks rendering math, not the provisional game-world calibration. Keep the transparent map in its default bottom-right position.
-
-app/overlay-status.json retains lastCandidate diagnostics after a candidate disappears, distinguishing failed matching from a projected point outside the visible map. A zero-candidate feed still draws no live rings.
-
-Collected cubes are removed from guidance as soon as the matching completion signature arrives. Guarded inner-frame recovery also handles embedded removals/completions for tracked entities; coordinate and lifecycle frames are processed in packet order. Cube-set changes are published immediately instead of waiting for the usual state-write interval. Recorded regression tests cover the stale entity 56885 encounter.
-
-The v2 capture backend preserves raw Player packets alongside successfully decoded events, allowing embedded cube-header recovery. The probe prefers bin/a2k-fixed-v2.exe when present. A guarded Player-header fallback requires the observed 61-byte frame prefix, configured type, flags 4, nonzero entity and valid coordinates; following metadata is explicitly treated as incomplete. Recorded replay for entity 28003 alerts on appearance and clears on collection removal. Backend tests and 31 Python tests pass. Existing running processes require a restart to load the changes.
-
-Fresh cube detections still say ?Cube found? when player identity/position is unavailable. The unavailable-position warning is spoken once until position returns; duplicate entities remain silent. Direction and distance remain withheld until a fresh own-character position is available. Starting capture after entering a zone can miss Self identification; do not reuse an old --player-entity value across rifts or sessions. A known, user-timed interaction can identify the current actor without leaving the region.
-
-The persistent top-left status panel is replaced by a large top-center CUBE FOUND banner. It appears only for fresh active cube detections and disappears for zero cubes, stale data or a stopped detector. It does not require successful minimap matching and also announces detected rift type 1301199. Multiple active cubes show a count. Diagnostics remain in overlay-status.json; the banner and markers remain click-through.
+Based on [hnomkeng/Aion2MapOverlay](https://github.com/hnomkeng/Aion2MapOverlay). Third-party attribution and licensing details are in [THIRD_PARTY.md](THIRD_PARTY.md).

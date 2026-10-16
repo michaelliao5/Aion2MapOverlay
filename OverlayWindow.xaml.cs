@@ -201,9 +201,7 @@ public partial class OverlayWindow : System.Windows.Window
         try
         {
             _markers = LiveCubeFeed.Read(_matcher?.MapSize ?? 8192);
-            CubeBanner.Visibility = LiveCubeFeed.Ready && LiveCubeFeed.ActiveCubeCount > 0 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
-            CubeCountText.Text = $"{LiveCubeFeed.ActiveCubeCount} cubes nearby";
-            CubeCountText.Visibility = LiveCubeFeed.ActiveCubeCount > 1 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+            UpdateCubeBanner();
             if (!LiveCubeFeed.Ready || _markers.Count == 0 || _matcher == null)
             {
                 ClearMarkers();
@@ -335,6 +333,14 @@ public partial class OverlayWindow : System.Windows.Window
     {
         try { System.IO.File.WriteAllText(System.IO.Path.Combine(AppContext.BaseDirectory, "overlay-status.json"), System.Text.Json.JsonSerializer.Serialize(new { updated_at = DateTimeOffset.UtcNow, matchCount, confidence, status, markerCount = _markerElements.Count, feedPath = LiveCubeFeed.StatePath, lastCandidate = _lastCandidateDiagnostic, bannerVisible = CubeBanner.Visibility == System.Windows.Visibility.Visible, activeCubeCount = LiveCubeFeed.ActiveCubeCount })); } catch (System.IO.IOException) { }
 
+    }
+
+    public bool UpdateCubeBanner()
+    {
+        CubeBanner.Visibility = LiveCubeFeed.Ready && LiveCubeFeed.ActiveCubeCount > 0 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+        CubeCountText.Text = $"{LiveCubeFeed.ActiveCubeCount} cubes nearby";
+        CubeCountText.Visibility = LiveCubeFeed.ActiveCubeCount > 1 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+        return CubeBanner.Visibility == System.Windows.Visibility.Visible;
     }
 
     public void RenderBannerPreview()
